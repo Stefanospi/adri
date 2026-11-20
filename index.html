@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Fiori per te</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one dark night scene; the ASCII bouquet floats in the middle, a handwritten note rests at the bottom */
+:root{
+  --bg:#0c0710;
+  --ink:#ffc4d6;
+  --soft:#c39bb8;
+  --dim:#7a5f74;
+  --accent:#ff6f9e;
+  --hand:"Caveat","Segoe Print","Bradley Hand",cursive;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,"Courier New",monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);overflow:hidden;font-family:var(--mono)}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+canvas:active{cursor:grabbing}
+.note{position:fixed;left:0;right:0;bottom:0;text-align:center;pointer-events:none;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-bottom:calc(env(safe-area-inset-bottom,0px) + 18px)}
+h1{font-family:var(--hand);font-weight:700;font-size:clamp(2.4rem,7vw,3.6rem);margin:0;line-height:1;
+  color:var(--ink);text-shadow:0 0 22px rgba(255,80,140,.45);text-wrap:balance}
+.msg{font-family:var(--hand);font-weight:500;font-size:clamp(1.25rem,3.6vw,1.7rem);color:var(--soft);margin:.25rem 0 .6rem;text-wrap:balance}
+.hint{font-size:11px;letter-spacing:.08em;color:var(--dim)}
+.note > *{opacity:0;transform:translateY(6px)}
+body.open .note > *{animation:rise 1.4s ease forwards}
+.msg{animation-delay:2.9s}.hint{animation-delay:3.6s}h1{animation-delay:2.4s}
+@keyframes rise{to{opacity:1;transform:none}}
+
+.gift{position:fixed;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;text-align:center;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  transition:opacity .7s ease,transform .7s ease}
+.gift.gone{opacity:0;transform:scale(1.25);pointer-events:none}
+.gift-to{font-family:var(--hand);font-weight:500;font-size:clamp(1.6rem,5.5vw,2.3rem);color:var(--soft);margin:0;text-wrap:balance}
+#open{font:inherit;cursor:pointer;color:var(--ink);background:rgba(255,90,150,.08);border:1.5px solid var(--accent);border-radius:20px;
+  padding:18px 38px 14px;display:flex;flex-direction:column;align-items:center;gap:8px;animation:pulse 2.4s ease-in-out infinite;
+  transition:background .2s ease,transform .2s ease}
+#open:hover{background:rgba(255,90,150,.18);transform:translateY(-2px)}
+#open:active{transform:scale(.97)}
+#open:focus-visible{outline:2px solid var(--ink);outline-offset:5px}
+#open pre{margin:0;font-family:var(--mono);font-size:15px;line-height:1.05;color:var(--accent)}
+#open .lbl{font-family:var(--hand);font-weight:700;font-size:2.4rem;line-height:1;color:var(--ink)}
+@keyframes pulse{0%,100%{box-shadow:0 0 16px rgba(255,90,150,.22)}50%{box-shadow:0 0 38px rgba(255,90,150,.55)}}
+
+/* schermi bassi (telefono in orizzontale): scritta compatta, più spazio al mazzo */
+@media (max-height:500px){
+  .note{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 8px)}
+  h1{font-size:1.9rem}
+  .msg{font-size:1.1rem;margin:0 0 .2rem}
+  .hint{display:none}
+  .gift{gap:10px}
+  #open{padding:10px 28px 8px;gap:4px}
+  #open pre{font-size:12px}
+  #open .lbl{font-size:1.9rem}
+}
+
+@media (prefers-reduced-motion:reduce){
+  body.open .note > *{animation:none;opacity:1;transform:none}
+  #open{animation:none}
+  .gift{transition:none}
+}
+</style>
+
+<canvas id="c" aria-label="Un mazzo di fiori in 3D fatto di caratteri ASCII colorati"></canvas>
+<div class="note" id="note">
+  <h1 id="title">Ti amo ♥</h1>
+  <p class="msg" id="msg">Almeno questi posso regalarteli</p>
+  <div class="hint">trascina per girarlo · tocca per farlo sbocciare di nuovo</div>
+</div>
+
+<div class="gift" id="gift">
+  <p class="gift-to" id="giftTo">ho una cosa per te</p>
+  <button id="open" type="button">
+<pre aria-hidden="true">  \ ♥ /
++---+---+
+|   |   |
++---+---+</pre>
+    <span class="lbl">regalino</span>
+  </button>
+</div>
+
+<script>
+/* ===== Personalizza qui ===== */
+const NOME = "Adriana";   // compare sopra il bottone: "Adriana, ho una cosa per te"
+/* I testi sotto il mazzo si cambiano direttamente nell'HTML (h1 e .msg) */
+/* ============================ */
+
+document.getElementById('giftTo').textContent = NOME ? `${NOME}, ho una cosa per te` : 'ho una cosa per te';
+
+const RAMP = ".,-~:;=!*#$@";
+const NL = RAMP.length;
+const MATS = [
+  [235,35,70],   // 0 rosa rossa
+  [255,115,170], // 1 rosa rosa
+  [250,246,238], // 2 margherita
+  [255,190,40],  // 3 cuore margherita
+  [185,110,255], // 4 tulipano viola
+  [255,140,90],  // 5 tulipano corallo
+  [80,195,95],   // 6 foglia
+  [50,140,65],   // 7 stelo
+  [205,155,108], // 8 carta kraft
+  [255,192,212], // 9 carta rosa
+  [228,30,68],   // 10 nastro
+  [255,255,255], // 11 nebbiolina
+  [255,150,195]  // 12 petali che cadono
+];
+/* luce minima per materiale: i fiori non scendono mai al buio */
+const AMB = [0.3,0.3,0.32,0.35,0.3,0.3,0.2,0.12,0.06,0.08,0.15,0.35,0.3];
+const STYLES = MATS.map(c => {
+  const a = [];
+  for (let i = 0; i < NL; i++) {
+    const L = i / (NL - 1), k = 0.1 + 1.0 * Math.pow(L, 1.15);
+    let r = Math.min(255, c[0] * k), g = Math.min(255, c[1] * k), b = Math.min(255, c[2] * k);
+    const h = Math.max(0, (L - 0.78) / 0.22) * 0.4;
+    r += (255 - r) * h; g += (255 - g) * h; b += (255 - b) * h;
+    a.push(`rgb(${r | 0},${g | 0},${b | 0})`);
+  }
+  return a;
+});
+
+/* ---------- vettori ---------- */
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const norm = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+function basis(d) {
+  d = norm(d);
+  const up = Math.abs(d[1]) < 0.995 ? [0, 1, 0] : [1, 0, 0];
+  const right = norm(cross(up, d));
+  return [right, d, cross(d, right)];
+}
+const toW = (B, o, l) => [
+  o[0] + B[0][0] * l[0] + B[1][0] * l[1] + B[2][0] * l[2],
+  o[1] + B[0][1] * l[0] + B[1][1] * l[1] + B[2][1] * l[2],
+  o[2] + B[0][2] * l[0] + B[1][2] * l[1] + B[2][2] * l[2]];
+const toN = (B, n) => toW(B, [0, 0, 0], n);
+
+function rng(seed) {
+  return () => { seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+const rand = rng(14022);
+
+/* ---------- geometria ---------- */
+const PA = [];          // x,y,z,nx,ny,nz,mat,tone,group
+const groups = [];      // {o,t0,dur,back}
+function group(o, t0, dur, back) { groups.push({ o, t0, dur, back }); return groups.length - 1; }
+function add(p, n, mat, tone, g) { PA.push(p[0], p[1], p[2], n[0], n[1], n[2], mat, tone, g); }
+
+function surf(f, nu, nv, emit) {
+  const e = 1e-3;
+  for (let i = 0; i <= nu; i++) for (let j = 0; j <= nv; j++) {
+    const u = i / nu, v = j / nv, p = f(u, v);
+    const du = u + e <= 1 ? sub(f(u + e, v), p) : sub(p, f(u - e, v));
+    const dv = v + e <= 1 ? sub(f(u, v + e), p) : sub(p, f(u, v - e));
+    let n = cross(du, dv); const l = Math.hypot(n[0], n[1], n[2]);
+    n = l < 1e-14 ? [0, 1, 0] : [n[0] / l, n[1] / l, n[2] / l];
+    emit(p, n, u, v);
+  }
+}
+
+function rose(c, d, s, mat, g, spin) {
+  const B = basis(d), layers = [3, 4, 5, 5, 6, 7];
+  layers.forEach((n, l) => {
+    const f = l / (layers.length - 1);
+    const rb = 0.01 + 0.05 * f, h = 0.09 + 0.075 * f, t = 0.12 + 1.1 * f;
+    const curl = 0.045 * f, droop = 0.05 * f * f, by = 0.05 - 0.07 * f;
+    const w = 2 * Math.PI / n * 1.05 + 0.35;
+    for (let k = 0; k < n; k++) {
+      const a0 = spin + l * 2.4 + k * 2 * Math.PI / n;
+      surf((u, v) => {
+        const vv = 2 * v - 1, uu = u * (1 - 0.28 * vv * vv), ang = a0 + vv * w / 2;
+        const r = rb + uu * h * Math.sin(t) + curl * uu * uu * uu + 0.012 * (1 - vv * vv) * uu;
+        const y = by + uu * h * Math.cos(t) - droop * uu * uu * uu;
+        return [r * Math.cos(ang) * s, y * s, r * Math.sin(ang) * s];
+      }, 12, 14, (p, nn, u, v) => { const vv = 2 * v - 1;
+        add(toW(B, c, p), toN(B, nn), mat, (0.45 + 0.55 * f) * (0.45 + 0.55 * Math.sqrt(1 - vv * vv)), g); });
+    }
+  });
+}
+
+function daisy(c, d, s, g, spin) {
+  const B = basis(d), n = 16;
+  for (let k = 0; k < n; k++) {
+    const a = spin + k * 2 * Math.PI / n, ca = Math.cos(a), sa = Math.sin(a);
+    surf((u, v) => {
+      const vv = 2 * v - 1, R = 0.05 + 0.19 * u;
+      const wd = 0.028 * Math.sin(Math.PI * (0.12 + 0.88 * u)) * vv;
+      const y = 0.012 - 0.05 * u * u + 0.008 * (1 - vv * vv) + 0.006 * Math.sin(k * 1.7);
+      return [(R * ca - wd * sa) * s, y * s, (R * sa + wd * ca) * s];
+    }, 14, 6, (p, nn, u, v) => add(toW(B, c, p), toN(B, nn), 2, 0.6 + 0.4 * Math.sqrt(1 - (2 * v - 1) ** 2), g));
+  }
+  surf((u, v) => {
+    const th = u * Math.PI / 2, ph = v * 2 * Math.PI;
+    return [0.07 * Math.sin(th) * Math.cos(ph) * s, (0.01 + 0.04 * Math.cos(th)) * s, 0.07 * Math.sin(th) * Math.sin(ph) * s];
+  }, 10, 30, (p, nn) => add(toW(B, c, p), toN(B, nn), 3, 0.95, g));
+}
+
+function tulip(c, d, s, mat, g, spin) {
+  const B = basis(d);
+  for (let layer = 0; layer < 2; layer++) for (let k = 0; k < 3; k++) {
+    const a = spin + k * 2 * Math.PI / 3 + layer * Math.PI / 3, w = 2 * Math.PI / 3 * 0.78;
+    surf((u, v) => {
+      const vv = 2 * v - 1, ang = a + vv * w / 2;
+      const r = (0.02 + 0.1 * Math.pow(Math.sin(Math.PI * (0.08 + 0.78 * u)), 0.7)) * (1 + layer * 0.1);
+      const y = 0.3 * u * (1 - 0.12 * vv * vv);
+      return [r * Math.cos(ang) * s, y * s, r * Math.sin(ang) * s];
+    }, 16, 10, (p, nn, u, v) => { const vv = 2 * v - 1;
+      add(toW(B, c, p), toN(B, nn), mat, (0.7 + 0.3 * layer) * (0.5 + 0.5 * Math.sqrt(1 - vv * vv)), g); });
+  }
+}
+
+function leaf(o, d, len, g) {
+  const B = basis(d);
+  surf((u, v) => {
+    const vv = 2 * v - 1, half = 0.15 * Math.sin(Math.PI * Math.pow(u, 0.8));
+    return [vv * half, u * len, -0.3 * len * u * u + 0.05 * vv * vv];
+  }, 28, 10, (p, nn, u, v) => add(toW(B, o, p), toN(B, nn), 6, Math.abs(2 * v - 1) < 0.12 ? 0.45 : 0.95, g));
+}
+
+function stem(a, b, g) {
+  const d = sub(b, a), B = basis(d), len = Math.hypot(d[0], d[1], d[2]);
+  surf((u, v) => {
+    const ph = v * 2 * Math.PI;
+    return [0.016 * Math.cos(ph), u * len, 0.016 * Math.sin(ph)];
+  }, 40, 6, (p, nn) => add(toW(B, a, p), toN(B, nn), 7, 0.85, g));
+}
+
+function ball(c, r, mat, g, nu, nv) {
+  surf((u, v) => {
+    const th = u * Math.PI, ph = v * 2 * Math.PI;
+    return [c[0] + r * Math.sin(th) * Math.cos(ph), c[1] + r * Math.cos(th), c[2] + r * Math.sin(th) * Math.sin(ph)];
+  }, nu, nv, (p, nn) => add(p, nn, mat, 1, g));
+}
+
+/* carta: kraft fuori, rosa dentro */
+const TIP = [0, -1.65, 0];
+const gK = group(TIP, 0, 0.9, false);
+surf((u, v) => {
+  const ang = v * 2 * Math.PI, y = -1.65 + u * (1.4 + 0.06 * Math.sin(ang * 5));
+  const r = 0.47 * (y + 1.65) * (1 + 0.05 * Math.sin(ang * 9) * u);
+  return [r * Math.cos(ang), y, r * Math.sin(ang)];
+}, 80, 240, (p, n) => add(p, n, 8, 0.55, gK));
+const gP = group(TIP, 0.15, 0.9, false);
+surf((u, v) => {
+  const ang = v * 2 * Math.PI + 0.3, y = -1.2 + u * (1.2 + 0.08 * Math.sin(ang * 6));
+  let r = 0.43 * (y + 1.65) * (1 + 0.06 * Math.sin(ang * 7 + 1) * u) + 0.25 * Math.pow(Math.max(0, u - 0.7), 2);
+  return [r * Math.cos(ang), y, r * Math.sin(ang)];
+}, 50, 240, (p, n) => add(p, n, 9, 0.6, gP));
+
+/* nastro con fiocco */
+const gR = group([0, -0.94, -0.36], 0.7, 0.8, true);
+surf((u, v) => {
+  const ang = v * 2 * Math.PI, y = -1.02 + u * 0.12, r = 0.47 * (y + 1.65) + 0.014;
+  return [r * Math.cos(ang), y, r * Math.sin(ang)];
+}, 6, 220, (p, n) => add(p, n, 10, 1, gR));
+for (const sd of [-1, 1]) {
+  surf((u, v) => {
+    const t = u * 2 * Math.PI, w = (v - 0.5) * 0.07;
+    return [sd * (0.11 - 0.11 * Math.cos(t)), -0.94 + 0.065 * Math.sin(t), -0.375 + w];
+  }, 34, 5, (p, n) => add(p, n, 10, 1, gR));
+  surf((u, v) => {
+    const w = (v - 0.5) * 0.05;
+    return [sd * (0.015 + 0.09 * u) + w, -0.95 - 0.3 * u, -0.38 - 0.03 * u];
+  }, 22, 5, (p, n) => add(p, n, 10, 0.9, gR));
+}
+ball([0, -0.94, -0.375], 0.03, 10, gR, 6, 10);
+
+/* fiori */
+const HUB = [0, -0.6, 0], STEM0 = [0, -1.4, 0];
+const flowers = [{ t: 'rose', s: 1.65, c: [0, 1.25, 0], at: 1.5 }];
+const ring1 = ['daisy', 'rosaP', 'tulipV', 'rose'];
+const ring2 = ['rose', 'daisy', 'tulipC', 'rosaP', 'daisy', 'tulipV'];
+ring1.forEach((t, i) => { const a = i / ring1.length * 2 * Math.PI + 0.4;
+  flowers.push({ t, s: 1.45, c: [0.56 * Math.cos(a), 0.88, 0.56 * Math.sin(a)], at: 1.75 + i * 0.12 }); });
+ring2.forEach((t, i) => { const a = i / ring2.length * 2 * Math.PI;
+  flowers.push({ t, s: 1.35, c: [0.95 * Math.cos(a), 0.36, 0.95 * Math.sin(a)], at: 2.1 + i * 0.1 }); });
+
+const gS = group(STEM0, 0.45, 1.2, false);
+flowers.forEach((f, i) => {
+  const d = norm(sub(f.c, HUB)), spin = rand() * 6.28;
+  const g = group(f.c, f.at, 1.1, true);
+  stem(STEM0, [f.c[0] - d[0] * 0.02, f.c[1] - d[1] * 0.02, f.c[2] - d[2] * 0.02], gS);
+  if (f.t === 'rose') rose(f.c, d, f.s, 0, g, spin);
+  else if (f.t === 'rosaP') rose(f.c, d, f.s, 1, g, spin);
+  else if (f.t === 'daisy') daisy(f.c, d, f.s * 1.05, g, spin);
+  else if (f.t === 'tulipV') tulip(f.c, d, f.s * 1.1, 4, g, spin);
+  else tulip(f.c, d, f.s * 1.1, 5, g, spin);
+});
+
+/* foglie */
+for (let i = 0; i < 7; i++) {
+  const a = (i + 0.5) / 7 * 2 * Math.PI + 0.2;
+  const o = [0.5 * Math.cos(a), -0.2, 0.5 * Math.sin(a)];
+  leaf(o, [Math.cos(a) * 0.9, 0.55, Math.sin(a) * 0.9], 0.6 + rand() * 0.15, group(o, 1.2 + i * 0.07, 0.9, true));
+}
+
+/* nebbiolina */
+for (let i = 0; i < 40; i++) {
+  const a = rand() * 6.283, rr = 0.3 + rand() * 0.8;
+  const c = [rr * Math.cos(a), 1.35 - 0.8 * rr * rr + (rand() - 0.5) * 0.16, rr * Math.sin(a)];
+  ball(c, 0.02 + rand() * 0.008, 11, group(c, 2.7 + rand() * 0.9, 0.6, true), 4, 7);
+}
+
+const P = new Float32Array(PA);
+const NP = P.length / 9;
+const GO = new Float32Array(groups.length * 3);
+groups.forEach((g, i) => { GO[i * 3] = g.o[0]; GO[i * 3 + 1] = g.o[1]; GO[i * 3 + 2] = g.o[2]; });
+const GS = new Float32Array(groups.length);
+
+/* ---------- render ---------- */
+const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+const note = document.getElementById('note');
+const D = 4.5, YC = 0;
+const LV = norm([-0.45, 0.75, -0.55]);
+let W, H, cw, ch, cols, rows, K, cx, cy, zb, cl, cm, ov, fontStr;
+/* bagliore: copia rimpicciolita del frame, ridisegnata sopra in modalità "lighter" */
+const glow = document.createElement('canvas'), gctx = glow.getContext('2d');
+const PCH = "*'`,";
+
+function resize() {
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  W = innerWidth; H = innerHeight;
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const m = Math.min(W, H);
+  const fs = m < 520 ? 7.5 : m < 900 ? 9 : 10;
+  fontStr = `500 ${fs}px "JetBrains Mono", ui-monospace, Consolas, monospace`;
+  ctx.font = fontStr; ctx.textBaseline = 'top';
+  cw = ctx.measureText('M').width; ch = fs * 1.15;
+  cols = Math.ceil(W / cw); rows = Math.ceil(H / ch);
+  zb = new Float32Array(cols * rows); cl = new Uint8Array(cols * rows);
+  cm = new Uint8Array(cols * rows); ov = new Uint8Array(cols * rows);
+  const avail = Math.max(200, H - note.offsetHeight - 8);
+  K = Math.min(0.9 * avail * D / 3.6, 0.96 * W * D / 2.9);
+  glow.width = Math.max(1, Math.ceil(W / 5)); glow.height = Math.max(1, Math.ceil(H / 5));
+  cx = W / 2; cy = avail / 2 + 6;
+}
+addEventListener('resize', resize);
+resize();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(resize);
+
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let startT = Infinity, opened = false;
+let yaw = -0.4, pitch = 0.08, vyaw = 0, dragging = false;
+const AUTO = reduce ? 0 : 0.42;
+
+const stars = Array.from({ length: 110 }, () => ({ x: rand(), y: rand(), ph: rand() * 6.28, sp: 0.6 + rand() * 1.6, c: rand() < 0.25 ? '+' : '.' }));
+const STAR = [0.12, 0.22, 0.34, 0.48, 0.62].map(a => `rgba(255,205,230,${a})`);
+
+const petals = Array.from({ length: 34 }, () => newPetal(true));
+function newPetal(any) {
+  const a = rand() * 6.283, r = 0.3 + rand() * 1.4;
+  return { x: r * Math.cos(a), z: r * Math.sin(a), y: any ? -2 + rand() * 4 : 2.1 + rand() * 0.6,
+    v: 0.12 + rand() * 0.2, ph: rand() * 6.28, ch: (rand() * PCH.length) | 0, l: 6 + ((rand() * 5) | 0) };
+}
+
+const easeBack = x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const easeCub = x => 1 - Math.pow(1 - x, 3);
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const t = (now - startT) / 1000;
+  if (!dragging) {
+    vyaw += (AUTO - vyaw) * Math.min(1, dt * 1.5);
+    yaw += vyaw * dt;
+  }
+
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i], x = Math.min(1, Math.max(0, (t - g.t0) / g.dur));
+    GS[i] = x <= 0 ? 0 : g.back ? easeBack(x) : easeCub(x);
+  }
+
+  zb.fill(0); ov.fill(0);
+  const cY = Math.cos(yaw), sY = Math.sin(yaw), cP = Math.cos(pitch), sP = Math.sin(pitch);
+  const lx = LV[0], ly = LV[1], lz = LV[2];
+
+  for (let i = 0, o = 0; i < NP; i++, o += 9) {
+    const g = P[o + 8], s = GS[g];
+    if (s < 0.002) continue;
+    const ox = GO[g * 3], oy = GO[g * 3 + 1], oz = GO[g * 3 + 2];
+    const x = ox + (P[o] - ox) * s, y = oy + (P[o + 1] - oy) * s, z = oz + (P[o + 2] - oz) * s;
+    const x1 = x * cY + z * sY, z1 = -x * sY + z * cY;
+    const y2 = y * cP + z1 * sP, zz = z1 * cP - y * sP + D;
+    if (zz < 0.6) continue;
+    const iz = 1 / zz;
+    const col = ((cx + x1 * K * iz) / cw) | 0, row = ((cy - (y2 - YC) * K * iz) / ch) | 0;
+    if (col < 0 || row < 0 || col >= cols || row >= rows) continue;
+    const idx = row * cols + col;
+    if (iz <= zb[idx]) continue;
+    zb[idx] = iz;
+    const nx = P[o + 3], ny = P[o + 4], nz = P[o + 5];
+    let nx1 = nx * cY + nz * sY, nz1 = -nx * sY + nz * cY;
+    let ny2 = ny * cP + nz1 * sP, nz2 = nz1 * cP - ny * sP;
+    if (nx1 * x1 + ny2 * y2 + nz2 * zz > 0) { nx1 = -nx1; ny2 = -ny2; nz2 = -nz2; }
+    let L = nx1 * lx + ny2 * ly + nz2 * lz;
+    const mt = P[o + 6], am = AMB[mt];
+    L = (am + (1.05 - am) * Math.max(0, L)) * P[o + 7];
+    let lv = (L * (NL - 1) + 0.5) | 0; if (lv >= NL) lv = NL - 1;
+    cl[idx] = lv; cm[idx] = mt;
+  }
+
+  /* petali che cadono, dopo la fioritura */
+  if (opened && (t > 2.8 || reduce)) {
+    for (const p of petals) {
+      if (!reduce) { p.y -= p.v * dt; p.ph += dt * 1.3; if (p.y < -2.2) Object.assign(p, newPetal(false)); }
+      const x = p.x + Math.sin(p.ph) * 0.12, z = p.z + Math.cos(p.ph * 0.8) * 0.08, y = p.y;
+      const x1 = x * cY + z * sY, z1 = -x * sY + z * cY;
+      const y2 = y * cP + z1 * sP, zz = z1 * cP - y * sP + D;
+      if (zz < 0.6) continue;
+      const iz = 1 / zz;
+      const col = ((cx + x1 * K * iz) / cw) | 0, row = ((cy - (y2 - YC) * K * iz) / ch) | 0;
+      if (col < 0 || row < 0 || col >= cols || row >= rows) continue;
+      const idx = row * cols + col;
+      if (iz <= zb[idx]) continue;
+      zb[idx] = iz; cm[idx] = 12; cl[idx] = Math.min(NL - 1, p.l + ((iz - 0.2) * 4 | 0)); ov[idx] = p.ch + 1;
+    }
+  }
+
+  ctx.fillStyle = '#0c0710'; ctx.fillRect(0, 0, W, H);
+  ctx.font = fontStr;
+  let st = '';
+  for (const s of stars) {
+    const col = (s.x * cols) | 0, row = (s.y * rows) | 0;
+    if (zb[row * cols + col] > 0) continue;
+    const a = (Math.sin(now / 1000 * s.sp + s.ph) * 0.5 + 0.5) * (STAR.length - 1);
+    const sty = STAR[a | 0]; if (sty !== st) { ctx.fillStyle = sty; st = sty; }
+    ctx.fillText(s.c, col * cw, row * ch);
+  }
+  for (let r = 0, idx = 0; r < rows; r++) {
+    const py = r * ch;
+    for (let c = 0; c < cols; c++, idx++) {
+      if (zb[idx] === 0) continue;
+      const sty = STYLES[cm[idx]][cl[idx]];
+      if (sty !== st) { ctx.fillStyle = sty; st = sty; }
+      ctx.fillText(ov[idx] ? PCH[ov[idx] - 1] : RAMP[cl[idx]], c * cw, py);
+    }
+  }
+  if (opened) {
+    gctx.clearRect(0, 0, glow.width, glow.height);
+    gctx.drawImage(canvas, 0, 0, glow.width, glow.height);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.6; ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(glow, 0, 0, W, H);
+    ctx.restore();
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ---------- interazione ---------- */
+let lx0 = 0, ly0 = 0, lt = 0, downX = 0, downY = 0, downT = 0, vel = 0;
+canvas.addEventListener('pointerdown', e => {
+  dragging = true; lx0 = downX = e.clientX; ly0 = downY = e.clientY; lt = downT = e.timeStamp; vel = 0;
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+});
+canvas.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const dx = e.clientX - lx0, dy = e.clientY - ly0, ddt = Math.max(1, e.timeStamp - lt) / 1000;
+  yaw += dx * 0.008; pitch = Math.max(-0.35, Math.min(0.75, pitch + dy * 0.005));
+  vel = dx * 0.008 / ddt; lx0 = e.clientX; ly0 = e.clientY; lt = e.timeStamp;
+});
+function release(e) {
+  if (!dragging) return;
+  dragging = false;
+  vyaw = Math.max(-5, Math.min(5, vel));
+  const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
+  if (opened && moved < 6 && e.timeStamp - downT < 350 && !reduce) startT = performance.now();
+}
+canvas.addEventListener('pointerup', release);
+canvas.addEventListener('pointercancel', release);
+
+/* ---------- regalino ---------- */
+const gift = document.getElementById('gift');
+document.getElementById('open').addEventListener('click', () => {
+  if (opened) return;
+  opened = true;
+  gift.classList.add('gone');
+  document.body.classList.add('open');
+  startT = reduce ? performance.now() - 1e6 : performance.now() + 300;
+  setTimeout(() => { gift.hidden = true; }, 750);
+});
+</script>
+
+</body>
+</html>
